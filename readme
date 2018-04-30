@@ -1,0 +1,11 @@
+12 actions
+a = [0 1 2 3 4 5 6 7 8 9 10 11]
+a0 means negtive, turn left
+a1 means possitive, turn right
+a2,a3 means if turn 1 * 0.01
+a4,a5 means if turn 2 * 0.01
+a6,a7 means if turn 4 * 0.01
+a8,a9 means if turn 8 * 0.01
+a10,a11 means if turn 16 * 0.01
+
+so steer range from -0.31 ~ +0.31
