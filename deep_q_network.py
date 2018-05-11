@@ -31,22 +31,26 @@ import tensorflow as tf
 import cv2
 import sys
 #sys.path.append("game/")
-#import wrapped_flappy_bird as game
+#import wrapped_flappy_car as game
 import wrapped_carla_sim as simulator
 import random
 import numpy as np
 import threading
-import proPrint
+from utils import proPrint
 from collections import deque
 
-GAME = 'bird' # the name of the game being played for log files
+GAME = 'angry-car' # the name of the game being played for log files
 #ACTIONS = 2 # number of valid actions
-ACTIONS = 12 # number of valid actions
+ACTIONS = 20 # number of valid actions
 GAMMA = 0.99 # decay rate of past observations
 OBSERVE = 100000. # timesteps to observe before training
 EXPLORE = 3000000. # frames over which to anneal epsilon
+EXPLORE = 2000000. # frames over which to anneal epsilon
 FINAL_EPSILON = 0.0001 # final value of epsilon
 INITIAL_EPSILON = 0.16 # starting value of epsilon
+INITIAL_EPSILON = 0.0001 # starting value of epsilon
+#INITIAL_EPSILON = 0.2 # starting value of epsilon
+REPLAY_MEMORY = 50000 # number of previous transitions to remember
 REPLAY_MEMORY = 50000 # number of previous transitions to remember
 BATCH = 32 # size of minibatch
 FRAME_PER_ACTION = 1
@@ -146,10 +150,6 @@ def trainNetwork(s, readout, h_fc1, sess, args):
         # store the previous observations in replay memory
         D = deque()
 
-        # printing
-        a_file = open("logs_" + GAME + "/readout.txt", 'w')
-        h_file = open("logs_" + GAME + "/hidden.txt", 'w')
-
         # get the first state by doing nothing and preprocess the image to 80x80x4
         do_nothing = np.zeros(ACTIONS)
         direction_index = 0
@@ -158,6 +158,10 @@ def trainNetwork(s, readout, h_fc1, sess, args):
         angle4_index = 6
         angle8_index = 8
         angle16_index = 10
+        angle32_index = 12
+        angle64_index = 14
+        angle128_index = 16
+        angle256_index = 18
 
         do_nothing[direction_index] = 1
         do_nothing[angle1_index] = 1
@@ -165,6 +169,10 @@ def trainNetwork(s, readout, h_fc1, sess, args):
         do_nothing[angle4_index] = 1
         do_nothing[angle8_index] = 1
         do_nothing[angle16_index] = 1
+        do_nothing[angle32_index] = 1
+        do_nothing[angle64_index] = 1
+        do_nothing[angle128_index] = 1
+        do_nothing[angle256_index] = 1
         game.set_steer(0)
         x_t, r_0, terminal = game.frame_step()
         x_t = cv2.cvtColor(cv2.resize(x_t, (160, 160)), cv2.COLOR_BGR2GRAY)
@@ -183,7 +191,7 @@ def trainNetwork(s, readout, h_fc1, sess, args):
 
         epsilon = INITIAL_EPSILON
         t = 0
-        while "flappy bird" != "angry bird":
+        while "flappy car" != "angry car":
             ## choose an action epsilon greedily
             readout_t = readout.eval(feed_dict={s : [s_t]})[0]
             ##print(readout_t)
@@ -196,33 +204,49 @@ def trainNetwork(s, readout, h_fc1, sess, args):
             angle4_index = 6
             angle8_index = 8
             angle16_index = 10
+            angle32_index = 12
+            angle64_index = 14
+            angle128_index = 16
+            angle256_index = 18
 
             # scale down epsilon
             if epsilon > FINAL_EPSILON and t > OBSERVE:
                 epsilon -= (INITIAL_EPSILON - FINAL_EPSILON) / EXPLORE
             if t % FRAME_PER_ACTION == 0:
-                if random.random() <= epsilon:
-                    action_index = random.randint(0,31)
+                random_value = random.random()
+                if random_value <= epsilon:
+                    random_value /= epsilon
+                    #max_random_action_index = ( 1 / (random_value ** 2 + 1) - 1/2 )  * 2 * 640 - 60
+                    max_random_action_index = int(random_value ** 2  * 620)
+                    action_index = random.randint(0, max(0,min(511,max_random_action_index)) )
                     steer = action_index
                     direction_index += random.randint(0,1)
                     if direction_index == 0:
-                        action_index *= -0.01
+                        action_index *= -0.001
                     else:
-                        action_index *= 0.01
+                        action_index *= 0.001
 
                     a_t[direction_index] = 1
                     a_t[angle1_index + steer % 2] = 1
-                    angle1_index /= 2
+                    steer /= 2
                     a_t[angle2_index + steer % 2] = 1
-                    angle1_index /= 2
+                    steer /= 2
                     a_t[angle4_index + steer % 2] = 1
-                    angle1_index /= 2
+                    steer /= 2
                     a_t[angle8_index + steer % 2] = 1
-                    angle1_index /= 2
+                    steer /= 2
                     a_t[angle16_index + steer % 2] = 1
+                    steer /= 2
+                    a_t[angle32_index + steer % 2] = 1
+                    steer /= 2
+                    a_t[angle64_index + steer % 2] = 1
+                    steer /= 2
+                    a_t[angle128_index + steer % 2] = 1
+                    steer /= 2
+                    a_t[angle256_index + steer % 2] = 1
                     proPrint.prCyan("\t\t\t\t----------Random Action----------")
-                    proPrint.prCyan("\t\t\t\t\t\t\t"+str(action_index))
-
+                    #proPrint.prCyan("\t       {:.3f}".format(action_index))
+                    proPrint.prCyan("\t\t\t{:.3f}".format(action_index))
                 else:
                     direction_index = np.argmax(readout_t[0:2])
                     angle1_index = np.argmax(readout_t[2:4]) + 2
@@ -230,6 +254,10 @@ def trainNetwork(s, readout, h_fc1, sess, args):
                     angle4_index = np.argmax(readout_t[6:8]) + 6
                     angle8_index = np.argmax(readout_t[8:10]) + 8
                     angle16_index = np.argmax(readout_t[10:12]) + 10
+                    angle32_index = np.argmax(readout_t[12:14]) + 12
+                    angle64_index = np.argmax(readout_t[14:16]) + 14
+                    angle128_index = np.argmax(readout_t[16:18]) + 16
+                    angle256_index = np.argmax(readout_t[18:20]) + 18
 
                     a_t[direction_index] = 1
                     a_t[angle1_index] = 1
@@ -237,7 +265,13 @@ def trainNetwork(s, readout, h_fc1, sess, args):
                     a_t[angle4_index] = 1
                     a_t[angle8_index] = 1
                     a_t[angle16_index] = 1
-                    action_index = round( (-1 * a_t[0] + a_t[1]) * (a_t[3] + a_t[5]*2 + a_t[7]*4 + a_t[9] * 8 + a_t[11]*16) * 0.01 , 2)
+                    a_t[angle32_index] = 1
+                    a_t[angle64_index] = 1
+                    a_t[angle128_index] = 1
+                    a_t[angle256_index] = 1
+                    action_index = round( (-1 * a_t[0] + a_t[1]) * 0.001 * \
+                                          (a_t[3] + a_t[5]*2 + a_t[7]*4 + a_t[9] * 8 + a_t[11]*16 + \
+                                           a_t[13]*32 + a_t[15]*64 + a_t[17]*128 + a_t[19]*256 ), 3)
                     #if t%10 == 0:
                     #    proPrint.prOrange(readout_t)
             else:
@@ -246,6 +280,33 @@ def trainNetwork(s, readout, h_fc1, sess, args):
             # run the selected action and observe next state and reward
             game.set_steer(action_index)
             x_t1_colored, r_t, terminal = game.frame_step()
+            if t % 5 ==0 or terminal:
+            #if True:
+                states = game.get_states()
+                message = '{time:,}\t'
+                message += 'epsilon:{episilon:.4f}\t'
+                message += 'action:{steer:+.3f}\t'
+                message += 'reward:{reward:+.3f}\t'
+                message += 'Dis:{dis:.2f}\t'
+                message += 'Yaw:{yaw:.2f}\t'
+                message += 'OffRoad:{offroad:.0%}\t'
+                message = message.format(
+                    time = t,
+                    steer=action_index,
+                    reward=r_t,
+                    episilon=epsilon,
+                    dis=states[1],
+                    yaw=states[2],
+                    offroad=states[4])
+                if math.fabs(states[2]) < 1 and states[1] < 0.5:
+                    proPrint.prGreen(message)
+                elif math.fabs(states[2]) < 2 and states[1] < 1:
+                    proPrint.prBlue(message)
+                elif math.fabs(states[2]) < 5 and states[1] < 2.5:
+                    proPrint.prYellow(message)
+                else:
+                    proPrint.prRed(message)
+
             if terminal:
                 game.new_game()
 
@@ -283,8 +344,12 @@ def trainNetwork(s, readout, h_fc1, sess, args):
                                          np.max(readout_j1_batch[i][4:6] ) + \
                                          np.max(readout_j1_batch[i][6:8] ) + \
                                          np.max(readout_j1_batch[i][8:10] ) + \
-                                         np.max(readout_j1_batch[i][10:12] )
-                                      ))
+                                         np.max(readout_j1_batch[i][10:12]) +\
+                                         np.max(readout_j1_batch[i][12:14]) +\
+                                         np.max(readout_j1_batch[i][14:16]) +\
+                                         np.max(readout_j1_batch[i][16:18]) +\
+                                         np.max(readout_j1_batch[i][18:20])
+                                      )  )
                 # perform gradient step
                 train_step.run(feed_dict = {
                     y : y_batch,
@@ -307,29 +372,6 @@ def trainNetwork(s, readout, h_fc1, sess, args):
                 state = "explore"
             else:
                 state = "train"
-
-            if t % 5 ==0 or terminal:
-            #if True:
-                states = game.get_states()
-                message = '{time:,}\t'
-                message += 'action:{steer:.2f}\t'
-                message += 'reward:{reward:.3e}\t'
-                message += 'Dis:{dis:.2f}\t'
-                message += 'Yaw:{yaw:.2f}\t'
-                message = message.format(
-                    time = t,
-                    steer=action_index,
-                    reward=r_t,
-                    dis=states[1],
-                    yaw=states[2])
-                if states[1] < 2:
-                    proPrint.prGreen(message)
-                elif states[1] < 3:
-                    proPrint.prBlue(message)
-                elif states[2] < 4:
-                    proPrint.prYellow(message)
-                else:
-                    proPrint.prRed(message)
 
 
 def playGame(args):

@@ -204,7 +204,7 @@ class CarlaGame(object):
         self._control.steer = max(-1,self._control.steer)
         self._control.steer = min(1,self._control.steer)
     def get_states(self):
-        return self._speed,self._error_dis,self._error_yaw, self._control.steer
+        return self._speed,self._error_dis,self._error_yaw, self._control.steer, self._offroad
 
     def _on_loop(self):
 
@@ -221,6 +221,7 @@ class CarlaGame(object):
                     measurements.player_measurements.transform.rotation.yaw]
                 self._speed = measurements.player_measurements.forward_speed
                 self._offroad = measurements.player_measurements.intersection_offroad
+                self._offroad %= 1
 
                 #self._print_player_states()
 
@@ -397,18 +398,21 @@ class CarlaGame(object):
             CAR_DUI *3.5 / 5.5
         if longest >= ROAD_WIDTH/2:
             terminal = True
-        reward = math.exp( (-1) * (longest -1) )
+        reward = math.exp( (-2) * (longest -1.3) )
+        reward = math.exp( (-10) * (refrenceX) ) +  (math.exp( 1 -  math.fabs(refrenceYaw) ) - math.exp(0))
+        reward = reward / 5
         self._error_dis, self._error_yaw = longest,refrenceYaw
+        self._error_dis, self._error_yaw = refrenceX, refrenceYaw
         del map_points
         del map_points_left
         del map_points_right
         del outer_points
         pygame.display.flip()
-        if terminal or self._offroad > 0:
-            terminal = True
-            reward = -2
+        #if terminal or self._offroad > 0:
+        if terminal:
+            reward = -5
         self._terminal = terminal
-        return image_data, reward, terminal or self._offroad > 0
+        return image_data, reward, terminal
 
 def main():
     argparser = argparse.ArgumentParser(
